@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Smart Seed Moisture Checker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {
+  font-family: Arial;
+  background:#f4f4f4;
+  text-align:center;
+  padding:10px;
+}
+h1 { color:#1e7f3f; }
+video, canvas { width:90%; border-radius:12px; margin:10px 0; }
+button {
+  padding:12px 20px;
+  border:none;
+  border-radius:10px;
+  background:#1e7f3f;
+  color:white;
+  font-size:16px;
+}
+#result {
+  margin-top:15px;
+  padding:15px;
+  background:white;
+  border-radius:12px;
+  box-shadow:0 2px 5px #aaa;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🌱 Smart Seed Moisture & Germination Checker</h1>
+<p>For packets using <b>Anthocyanin (E-163)</b> colour strip</p>
+
+<video id="video" autoplay></video>
+<br>
+<button onclick="capture()">📸 Capture Colour</button>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<div id="result">Result will appear here</div>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const result = document.getElementById("result");
+
+navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}})
+.then(stream => video.srcObject = stream);
+
+function capture(){
+  const ctx = canvas.getContext("2d");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video,0,0);
+  const data = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+
+  let r=0, g=0, b=0, count=0;
+  for(let i=0;i<data.length;i+=40){
+    r += data[i];
+    g += data[i+1];
+    b += data[i+2];
+    count++;
+  }
+
+  r = Math.floor(r/count);
+  g = Math.floor(g/count);
+  b = Math.floor(b/count);
+
+  analyseColour(r,g,b);
+}
+
+function analyseColour(r,g,b){
+  let moisture, germination, advice;
+
+  if(r > 120 && b < 80){
+    moisture="LOW";
+    germination="40-55%";
+    advice="Increase moisture. Water lightly.";
+  }
+  else if(b > 120 && g < 110){
+    moisture="NORMAL";
+    germination="75-85%";
+    advice="Packet condition is good. Ready to plant.";
+  }
+  else if(b > 120 && g > 120){
+    moisture="HIGH";
+    germination="55-65%";
+    advice="Too much moisture. Dry packet area.";
+  }
+  else if(g > r && g > b){
+    moisture="OPTIMAL";
+    germination="85-95%";
+    advice="Ideal condition. Best for germination.";
+  }
+  else{
+    moisture="UNKNOWN";
+    germination="N/A";
+    advice="Rescan under better light";
+  }
+
+  result.innerHTML = `
+  <h3>📊 Seed Condition</h3>
+  🔴 R: ${r}  🟢 G: ${g}  🔵 B: ${b}<br><br>
+  💧 Moisture Level: <b>${moisture}</b><br>
+  🌱 Germination Power: <b>${germination}</b><br>
+  ✅ Advice: <b>${advice}</b>
+  `;
+}
+</script>
+</body>
+</html>
