@@ -1,115 +1,397 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Smart Seed Moisture Checker</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Smart Seed — Camera Colour Check</title>
 <style>
-body {
-  font-family: Arial;
-  background:#f4f4f4;
-  text-align:center;
-  padding:10px;
-}
-h1 { color:#1e7f3f; }
-video, canvas { width:90%; border-radius:12px; margin:10px 0; }
-button {
-  padding:12px 20px;
-  border:none;
-  border-radius:10px;
-  background:#1e7f3f;
-  color:white;
-  font-size:16px;
-}
-#result {
-  margin-top:15px;
-  padding:15px;
-  background:white;
-  border-radius:12px;
-  box-shadow:0 2px 5px #aaa;
-}
+  :root{
+    --bg:#f3f7f2;
+    --card:#ffffff;
+    --accent:#1e7f3f;
+    --danger:#d9534f;
+    --soft:#6c757d;
+  }
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:var(--bg);color:#14202a}
+  .wrap{max-width:760px;margin:18px auto;padding:14px}
+  header{display:flex;align-items:center;gap:12px}
+  h1{margin:0;font-size:20px;color:var(--accent)}
+  p.lead{margin:6px 0 12px;color:var(--soft);font-size:14px}
+  .card{background:var(--card);border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(10,20,30,0.06);margin-bottom:14px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  select,button{padding:10px 12px;border-radius:10px;border:1px solid #e6e6e6;background:white;font-size:15px}
+  button.primary{background:var(--accent);color:white;border:none}
+  button.ghost{background:transparent;border:1px dashed #dfe7de}
+  .videowrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+  video{width:100%;max-height:360px;border-radius:10px;background:#000}
+  canvas{display:none}
+  .result-row{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
+  .panel{flex:1;min-width:240px}
+  .swatch{width:56px;height:56px;border-radius:8px;border:1px solid #ddd;box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
+  .meta{font-size:13px;color:#37474f}
+  .big{font-size:18px;font-weight:700}
+  .meter-wrap{padding:12px}
+  .meter{height:22px;background:#eee;border-radius:14px;overflow:hidden;position:relative}
+  .meter-fill{height:100%;width:0%;background:linear-gradient(90deg,#6ad36a,#1e7f3f);border-radius:14px;transition:width 900ms ease, background 400ms linear}
+  .advice{padding:12px;border-radius:8px;background:#fbfffa;border:1px solid #e6f6e7}
+  .badge{display:inline-block;padding:6px 8px;border-radius:8px;font-weight:600}
+  .status-low{background:#fff5f5;color:var(--danger);border:1px solid #f7d6d6}
+  .status-ok{background:#f3fff6;color:#007a2f;border:1px solid #d4efd4}
+  .status-high{background:#f2f8ff;color:#0b62a3;border:1px solid #d8e9fb}
+  footer{font-size:13px;color:var(--soft);text-align:center;margin-top:6px}
+  .small{font-size:12px;color:var(--soft)}
+  @media (min-width:720px){
+    .result-row{flex-wrap:nowrap}
+  }
 </style>
 </head>
-
 <body>
+<div class="wrap">
+  <header>
+    <h1>🌱 Smart Seed — Moisture & Germination Check</h1>
+  </header>
+  <p class="lead">Select seed type, open camera, capture the packet indicator strip. Works offline — runs on your phone browser.</p>
 
-<h1>🌱 Smart Seed Moisture & Germination Checker</h1>
-<p>For packets using <b>Anthocyanin (E-163)</b> colour strip</p>
+  <div class="card">
+    <div class="controls">
+      <label for="seed">Seed type</label>
+      <select id="seed">
+        <option value="paddy">Paddy (default)</option>
+        <option value="wheat">Wheat</option>
+        <option value="maize">Maize</option>
+        <option value="custom">Add custom...</option>
+      </select>
 
-<video id="video" autoplay></video>
-<br>
-<button onclick="capture()">📸 Capture Colour</button>
-<canvas id="canvas" style="display:none;"></canvas>
+      <input id="customName" placeholder="Custom name (if chosen)" style="display:none;padding:10px 12px;border-radius:10px;border:1px solid #eee" />
+      <button id="openCam" class="primary">Open Camera</button>
+      <button id="captureBtn">📸 Capture</button>
+      <button id="resetBtn" class="ghost">Reset</button>
+    </div>
 
-<div id="result">Result will appear here</div>
+    <div class="videowrap card" style="margin-top:12px">
+      <video id="video" autoplay playsinline></video>
+      <canvas id="canvas"></canvas>
+      <div style="width:100%;display:flex;justify-content:center;gap:10px;margin-top:6px">
+        <small class="small">Tip: include white square near strip for consistent light</small>
+      </div>
+    </div>
+  </div>
+
+  <div class="result-row">
+    <div class="panel card">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="swatch" id="swatch"></div>
+        <div>
+          <div class="meta">Detected colour</div>
+          <div class="big" id="rgbText">R - G - B</div>
+          <div class="small" id="hsvText"></div>
+        </div>
+      </div>
+
+      <hr style="margin:12px 0">
+
+      <div class="meta">Moisture status</div>
+      <div id="moistureState" style="margin-top:8px">
+        <span class="badge status-ok">--</span>
+      </div>
+
+      <div style="margin-top:10px" class="small">Confidence: <span id="confidence">--</span></div>
+    </div>
+
+    <div class="panel card">
+      <div class="meter-wrap">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="meta">Germination estimate</div>
+          <div id="scoreText" class="big">-- / 100</div>
+        </div>
+
+        <div class="meter" aria-hidden="true" style="margin-top:10px">
+          <div id="meterFill" class="meter-fill"></div>
+        </div>
+
+        <div style="margin-top:12px" id="adviceBox" class="advice">
+          <div class="meta">Advice</div>
+          <div id="adviceText" style="margin-top:6px">No sample yet — capture the strip to analyze.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card small" style="margin-top:10px">
+    <strong>How it works:</strong> The page averages the captured pixels in the frame, converts to a simple colour score using pre-set calibration for each seed type, and displays a germination score and farmer-friendly advice. For best results, place the indicator strip near a small white patch when capturing.
+  </div>
+
+  <footer>Made for YIP • Works on mobile (allow camera permission)</footer>
+</div>
 
 <script>
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const result = document.getElementById("result");
+/* ---- Seed calibrations (tweak these with real tests) ----
+ Each seed has an "ideal" color (target RGB) representing OPTIMAL moisture.
+ We compare the captured avg color to the ideal and compute a score.
+ Also each seed has preferred hue/value thresholds to classify low/ok/high.
+*/
+const calibrations = {
+  paddy: {
+    display:"Paddy",
+    idealRgb: [60,120,200],   // example target (blue/green)
+    tolerance: 70,
+    thresholds: { lowB: 100, highB: 170 } // example use of blue channel to separate states
+  },
+  wheat: {
+    display:"Wheat",
+    idealRgb: [80,140,160],
+    tolerance: 70,
+    thresholds: { lowB: 90, highB: 150 }
+  },
+  maize: {
+    display:"Maize",
+    idealRgb: [70,130,140],
+    tolerance: 72,
+    thresholds: { lowB: 95, highB: 155 }
+  }
+};
 
-navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}})
-.then(stream => video.srcObject = stream);
+// UI elements
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const openCam = document.getElementById('openCam');
+const captureBtn = document.getElementById('captureBtn');
+const resetBtn = document.getElementById('resetBtn');
+const swatch = document.getElementById('swatch');
+const rgbText = document.getElementById('rgbText');
+const hsvText = document.getElementById('hsvText');
+const moistureState = document.getElementById('moistureState');
+const meterFill = document.getElementById('meterFill');
+const scoreText = document.getElementById('scoreText');
+const adviceText = document.getElementById('adviceText');
+const confidenceTxt = document.getElementById('confidence');
+const seedSelect = document.getElementById('seed');
+const customName = document.getElementById('customName');
 
-function capture(){
-  const ctx = canvas.getContext("2d");
+let stream = null;
+
+// seed selector UI
+seedSelect.addEventListener('change', ()=> {
+  if(seedSelect.value === 'custom'){
+    customName.style.display = 'inline-block';
+  } else {
+    customName.style.display = 'none';
+  }
+});
+
+// open camera
+openCam.addEventListener('click', async () => {
+  try {
+    if(stream){ // already open
+      return;
+    }
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio:false });
+    video.srcObject = stream;
+    video.play();
+  } catch(e) {
+    alert('Camera permission is required. Please allow camera access in your browser.');
+    console.error(e);
+  }
+});
+
+// capture and analyze
+captureBtn.addEventListener('click', ()=> {
+  if(!stream){
+    alert('Open the camera first (Open Camera).');
+    return;
+  }
+  // draw the current frame
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  ctx.drawImage(video,0,0);
-  const data = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  let r=0, g=0, b=0, count=0;
-  for(let i=0;i<data.length;i+=40){
-    r += data[i];
-    g += data[i+1];
-    b += data[i+2];
+  // Optionally: crop center area only (indicator strip usually near center)
+  const cropW = Math.floor(canvas.width * 0.6);
+  const cropH = Math.floor(canvas.height * 0.15);
+  const cropX = Math.floor((canvas.width - cropW)/2);
+  const cropY = Math.floor((canvas.height - cropH)/2);
+
+  const imgData = ctx.getImageData(cropX, cropY, cropW, cropH).data;
+
+  // average (sample every Nth pixel for speed)
+  let r=0,g=0,b=0,count=0;
+  const step = 8; // bigger = faster, lower accuracy
+  for(let i=0;i<imgData.length;i += 4*step){
+    r += imgData[i];
+    g += imgData[i+1];
+    b += imgData[i+2];
     count++;
   }
+  r = Math.round(r/count);
+  g = Math.round(g/count);
+  b = Math.round(b/count);
 
-  r = Math.floor(r/count);
-  g = Math.floor(g/count);
-  b = Math.floor(b/count);
+  // update UI
+  swatch.style.background = `rgb(${r},${g},${b})`;
+  rgbText.innerText = `R ${r}  •  G ${g}  •  B ${b}`;
+  const hsv = rgbToHsv(r,g,b);
+  hsvText.innerText = `H ${Math.round(hsv[0])}° • S ${Math.round(hsv[1]*100)}% • V ${Math.round(hsv[2]*100)}%`;
 
-  analyseColour(r,g,b);
+  // analyze relative to selected seed
+  let seedKey = seedSelect.value;
+  if(seedKey === 'custom') {
+    // no calibration data — give generic advice based on blue channel
+    performGenericAnalysis(r,g,b);
+  } else {
+    performSeedAnalysis(seedKey, r, g, b);
+  }
+});
+
+// reset
+resetBtn.addEventListener('click', ()=>{
+  scoreText.innerText = '-- / 100';
+  meterFill.style.width = '0%';
+  meterFill.style.background = 'linear-gradient(90deg,#6ad36a,#1e7f3f)';
+  adviceText.innerText = 'No sample yet — capture the strip to analyze.';
+  swatch.style.background = '#fff';
+  rgbText.innerText = 'R - G - B';
+  hsvText.innerText = '';
+  moistureState.innerHTML = '<span class="badge status-ok">--</span>';
+  confidenceTxt.innerText = '--';
+});
+
+// generic fallback
+function performGenericAnalysis(r,g,b){
+  const blue = b;
+  let state, score, advice, conf=0.7;
+  if(blue < 100){
+    state = 'LOW';
+    score = clamp(40 + Math.round((blue/100)*10), 20,60); // generic
+    advice = 'Low moisture indicated. Water before sowing.';
+  } else if(blue >= 100 && blue <= 160){
+    state = 'OPTIMAL';
+    score = clamp(75 + Math.round(((blue-100)/60)*20), 60,95);
+    advice = 'Good moisture. Ready to sow.';
+  } else {
+    state = 'HIGH';
+    score = clamp(50 + Math.round(((255-blue)/100)*10), 30,70);
+    advice = 'High moisture. Avoid waterlogging; dry slightly.';
+  }
+  showResults(state, score, advice, r,g,b,conf);
 }
 
-function analyseColour(r,g,b){
-  let moisture, germination, advice;
-
-  if(r > 120 && b < 80){
-    moisture="LOW";
-    germination="40-55%";
-    advice="Increase moisture. Water lightly.";
-  }
-  else if(b > 120 && g < 110){
-    moisture="NORMAL";
-    germination="75-85%";
-    advice="Packet condition is good. Ready to plant.";
-  }
-  else if(b > 120 && g > 120){
-    moisture="HIGH";
-    germination="55-65%";
-    advice="Too much moisture. Dry packet area.";
-  }
-  else if(g > r && g > b){
-    moisture="OPTIMAL";
-    germination="85-95%";
-    advice="Ideal condition. Best for germination.";
-  }
-  else{
-    moisture="UNKNOWN";
-    germination="N/A";
-    advice="Rescan under better light";
+// seed-specific analysis
+function performSeedAnalysis(seedKey, r,g,b){
+  const cal = calibrations[seedKey];
+  if(!cal){
+    performGenericAnalysis(r,g,b);
+    return;
   }
 
-  result.innerHTML = `
-  <h3>📊 Seed Condition</h3>
-  🔴 R: ${r}  🟢 G: ${g}  🔵 B: ${b}<br><br>
-  💧 Moisture Level: <b>${moisture}</b><br>
-  🌱 Germination Power: <b>${germination}</b><br>
-  ✅ Advice: <b>${advice}</b>
-  `;
+  // distance from ideal color (euclidean)
+  const d = colorDistance([r,g,b], cal.idealRgb);
+  // convert distance to score (lower distance => higher score)
+  const rawScore = Math.max(0, 100 - (d / cal.tolerance) * 100);
+  const score = Math.round(clamp(rawScore, 0, 100));
+
+  // use B channel thresholds for moisture classification (simple, tuned by tests)
+  let state;
+  const blue = b;
+  if(blue < cal.thresholds.lowB) state = 'LOW';
+  else if(blue > cal.thresholds.highB) state = 'HIGH';
+  else state = 'OPTIMAL';
+
+  // advice tailored
+  let advice;
+  if(state === 'LOW'){
+    advice = `${cal.display} — Moisture low. Lightly mist or soak seeds per recommended method. Avoid deep flooding.`;
+  } else if(state === 'OPTIMAL'){
+    advice = `${cal.display} — Optimal moisture. Sow within recommended window for best germination.`;
+  } else {
+    advice = `${cal.display} — Moisture high. Allow packet/soil to drain or air-dry to prevent rot.`;
+  }
+
+  // confidence estimate (higher when color difference small and saturation moderate)
+  const hsv = rgbToHsv(r,g,b);
+  let conf = 1 - Math.min(1, d / (cal.tolerance * 2)); // 0..1
+  // penalize if value too low or too high drastically
+  if(hsv[2] < 0.12 || hsv[2] > 0.98) conf *= 0.6;
+  if(hsv[1] < 0.08) conf *= 0.8;
+  conf = Math.round(conf * 100);
+
+  showResults(state, score, advice, r,g,b,conf);
 }
+
+// show results + animate meter
+function showResults(state, score, advice, r,g,b,confPercent){
+  // set status badge
+  let badge = document.createElement('span');
+  badge.className = 'badge';
+  if(state === 'LOW') badge.classList.add('status-low');
+  else if(state === 'OPTIMAL') badge.classList.add('status-ok');
+  else badge.classList.add('status-high');
+  badge.innerText = state === 'OPTIMAL' ? 'Optimal' : (state === 'LOW' ? 'Low moisture' : 'High moisture');
+
+  moistureState.innerHTML = '';
+  moistureState.appendChild(badge);
+
+  // animated meter fill
+  scoreText.innerText = `${score} / 100`;
+  // change color gradient by score
+  const fillColor = scoreToGradient(score);
+  meterFill.style.background = fillColor;
+  // animated width
+  setTimeout(()=> {
+    meterFill.style.width = `${score}%`;
+  }, 80);
+
+  // advice
+  adviceText.innerText = advice;
+
+  // confidence
+  confidenceTxt.innerText = `${confPercent}%`;
+
+  // show numeric debug in small area (optional)
+  // add small details under swatch
+}
+
+// small utilities
+function colorDistance(a,b){
+  const dr = a[0]-b[0], dg = a[1]-b[1], db = a[2]-b[2];
+  return Math.sqrt(dr*dr + dg*dg + db*db);
+}
+function clamp(v, a, z){ return Math.max(a, Math.min(z, v)); }
+
+// convert to HSV (H in degrees 0..360, S and V in 0..1)
+function rgbToHsv(r,g,b){
+  r/=255;g/=255;b/=255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h, s, v = max;
+  const d = max - min;
+  s = max === 0 ? 0 : d / max;
+  if(max === min) h = 0;
+  else {
+    switch(max){
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)); break;
+      case g: h = ((b - r) / d + 2); break;
+      case b: h = ((r - g) / d + 4); break;
+    }
+    h /= 6;
+    h = h * 360;
+  }
+  return [h, s, v];
+}
+
+function scoreToGradient(score){
+  // green for high, orange for medium, red for low
+  if(score >= 80) return 'linear-gradient(90deg,#8ef07a,#1e7f3f)';
+  if(score >= 60) return 'linear-gradient(90deg,#ffd77a,#f07b3a)';
+  return 'linear-gradient(90deg,#ff8a8a,#d9534f)';
+}
+
+/* Clean up camera when leaving page */
+window.addEventListener('pagehide', ()=> {
+  if(stream){
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+});
 </script>
 </body>
 </html>
